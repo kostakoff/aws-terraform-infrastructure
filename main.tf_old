@@ -1,0 +1,294 @@
+terraform {
+  required_providers {
+    aws = {
+      source = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = "ca-central-1"
+}
+
+#### create base
+
+# Create VPC local network
+resource "aws_vpc" "lab-net" {
+  cidr_block = "10.10.0.0/16"
+  
+  tags = {
+    Name = "lab-net"
+  }
+}
+
+# create lab dns zone
+resource "aws_route53_zone" "lab-net" {
+  name = "myltd.lab"
+
+  vpc {
+    vpc_id = aws_vpc.lab-net.id
+  }
+}
+
+data "aws_availability_zones" "available" {}
+
+#### crate DMZ
+
+# Create dmz subnet
+resource "aws_subnet" "lab-dmz" {
+  vpc_id     = aws_vpc.lab-net.id
+  cidr_block = "10.10.2.0/24"
+  availability_zone = data.aws_availability_zones.available.names[0]
+
+  tags = {
+    Name = "lab-dmz"
+  }
+}
+
+# Create internet gateway
+resource "aws_internet_gateway" "lab-internet" {
+  vpc_id = aws_vpc.lab-net.id
+
+  tags = {
+    Name = "lab-internet"
+  }
+}
+
+# Create dmz route table
+resource "aws_route_table" "lab2internet" {
+  vpc_id = aws_vpc.lab-net.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.lab-internet.id
+  }
+
+  tags = {
+    Name = "lab2internet"
+  }
+}
+
+# Create dmz to internet route table association
+resource "aws_route_table_association" "lab-dmz2internet" {
+  subnet_id      = aws_subnet.lab-dmz.id
+  route_table_id = aws_route_table.lab2internet.id
+}
+
+# Create default security group for ec2
+resource "aws_security_group" "lab-default" {
+  name = "lab-default-security-group"
+  description = "lab-default-security-group"
+  vpc_id = aws_vpc.lab-net.id
+  ingress {
+    cidr_blocks = ["0.0.0.0/0"]
+    from_port = 0
+    to_port = 0
+    protocol = "-1"
+  }
+  egress {
+    cidr_blocks = ["0.0.0.0/0"]
+    from_port = 0
+    to_port = 0
+    protocol = "-1"
+  }
+  tags = {
+    "Name" = "lab-default"
+  }
+}
+
+#### create DMZ NAT
+
+# Create nat public ip
+resource "aws_eip" "lab-nat" {
+  depends_on = [
+    aws_internet_gateway.lab-internet
+  ]
+
+  tags = {
+    Name = "lab-nat"
+  }
+}
+
+# Create NAT gateway
+resource "aws_nat_gateway" "lab-nat" {
+  allocation_id = aws_eip.lab-nat.id
+  subnet_id = aws_subnet.lab-dmz.id
+  
+  tags = {
+    "Name" = "lab-nat"
+  }
+}
+
+resource "aws_route_table" "lab-nat" {
+  vpc_id = aws_vpc.lab-net.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.lab-nat.id
+  }
+}
+
+#### vpn subnet
+
+# Create vpn servers subnet
+resource "aws_subnet" "lab-vpn" {
+  vpc_id     = aws_vpc.lab-net.id
+  cidr_block = "10.10.121.0/24"
+  availability_zone = data.aws_availability_zones.available.names[0]
+
+  tags = {
+    Name = "lab-vpn"
+  }
+}
+
+# Create dev to nat route table association
+resource "aws_route_table_association" "lab-vpn2nat" {
+  subnet_id = aws_subnet.lab-vpn.id
+  route_table_id = aws_route_table.lab-nat.id
+}
+
+/*
+# Create network interface for vpn server
+resource "aws_network_interface" "lab-vpn-server1" {
+  subnet_id       = aws_subnet.lab-vpn.id
+  security_groups = [aws_security_group.lab-default.id]
+
+  tags = {
+    Name = "lab-vpn-server1"
+  }
+}
+
+# create dns recor for lab-vpn-server1
+resource "aws_route53_record" "lab-vpn-server1" {
+  zone_id = aws_route53_zone.lab-net.id
+  name    = "vpn1.myltd.lab"
+  type    = "A"
+  ttl     = 300
+  records = [aws_network_interface.lab-vpn-server1.private_ip]
+  depends_on = [
+    aws_network_interface.lab-vpn-server1
+  ]
+}
+
+# Create vpn server
+resource "aws_instance" "lab-vpn-server1" {
+  ami           = "ami-0aa07ba01c35e28bd"
+  instance_type = "t3.medium"
+  availability_zone = data.aws_availability_zones.available.names[0]
+  key_name = "main-key"
+  network_interface {
+    device_index = 0
+    network_interface_id = aws_network_interface.lab-vpn-server1.id
+  }
+
+  tags = {
+    "Name" = "lab-vpn-server1"
+  }
+  user_data = file("${path.module}/vpn_setup.ps1")
+}
+
+# create public ip for ingress load balanser
+resource "aws_eip" "vpn-ip" {
+  tags = {
+    Name = "vpn-ip"
+  }
+}
+
+# create nlb instance
+resource "aws_lb" "vpn-nlb" {
+  name               = "vpn-nlb"
+  internal           = false
+  load_balancer_type = "network"
+#  subnets            = [aws_subnet.lab-dmz.id]
+  subnet_mapping {
+    subnet_id        = aws_subnet.lab-dmz.id
+    allocation_id    = aws_eip.vpn-ip.id
+  }
+}
+
+# create target group
+resource "aws_lb_target_group" "vpn" {
+  name        = "vpn-tg"
+  protocol    = "TCP"
+  port        = 3389
+  vpc_id      = aws_vpc.lab-net.id
+  target_type = "instance"
+}
+
+# add vpn server to target list
+resource "aws_lb_target_group_attachment" "vpn" {
+  target_group_arn = aws_lb_target_group.vpn.arn
+  target_id        = aws_instance.lab-vpn-server1.id 
+  port             = 3389
+}
+
+# create vpn public ip port listener
+resource "aws_lb_listener" "vpn-listener" {
+  load_balancer_arn = aws_lb.vpn-nlb.arn
+  protocol          = "TCP"
+  port              = 3389
+  
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.vpn.arn
+  }
+}*/
+#### vdi subnet
+
+# Create vdi servers subnet
+resource "aws_subnet" "lab-vdi" {
+  vpc_id     = aws_vpc.lab-net.id
+  cidr_block = "10.10.121.0/24"
+  availability_zone = data.aws_availability_zones.available.names[0]
+
+  tags = {
+    Name = "lab-vpn"
+  }
+}
+
+resource "aws_route_table_association" "lab-vdi2nat" {
+  subnet_id = aws_subnet.lab-vpn.id
+  route_table_id = aws_route_table.lab-nat.id
+}
+
+# Create network interface for vpn server
+resource "aws_network_interface" "lab-vpn-server1" {
+  subnet_id       = aws_subnet.lab-vpn.id
+  security_groups = [aws_security_group.lab-default.id]
+
+  tags = {
+    Name = "lab-vpn-server1"
+  }
+}
+
+# create dns recor for lab-vpn-server1
+resource "aws_route53_record" "lab-vdi-server1" {
+  zone_id = aws_route53_zone.lab-net.id
+  name    = "vdi1.myltd.lab"
+  type    = "A"
+  ttl     = 300
+  records = [aws_network_interface.lab-vpn-server1.private_ip]
+  depends_on = [
+    aws_network_interface.lab-vpn-server1
+  ]
+}
+
+# Create vpn server
+resource "aws_instance" "lab-vpn-server1" {
+  ami           = "ami-0aa07ba01c35e28bd"
+  instance_type = "t3.medium"
+  availability_zone = data.aws_availability_zones.available.names[0]
+  key_name = "main-key"
+  network_interface {
+    device_index = 0
+    network_interface_id = aws_network_interface.lab-vpn-server1.id
+  }
+
+  tags = {
+    "Name" = "lab-vdi-server1"
+  }
+}
+
+#### dev network
+
+#### prod network
