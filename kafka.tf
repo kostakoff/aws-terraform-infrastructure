@@ -1,4 +1,4 @@
-#### vm's
+#### kafka clusters
 
 module "dev-kafka" {
   source = "./modules/kafka"
