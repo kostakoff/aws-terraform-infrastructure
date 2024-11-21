@@ -3,7 +3,7 @@
 # Create dmz subnet
 resource "aws_subnet" "lab-dmz" {
   vpc_id     = aws_vpc.lab-net.id
-  cidr_block = "10.10.52.0/24"
+  cidr_block = "10.10.48.0/24"
   availability_zone = data.aws_availability_zones.available.names[0]
 
   tags = {

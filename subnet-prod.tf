@@ -3,7 +3,7 @@
 # Create prod 1 subnet
 resource "aws_subnet" "lab-prod-a" {
   vpc_id     = aws_vpc.lab-net.id
-  cidr_block = "10.10.210.0/24"
+  cidr_block = "10.10.208.0/21"
   availability_zone = data.aws_availability_zones.available.names[0]
 
   tags = {
@@ -20,7 +20,7 @@ resource "aws_route_table_association" "lab-prod-a2nat" {
 # Create prod 2 subnet
 resource "aws_subnet" "lab-prod-b" {
   vpc_id     = aws_vpc.lab-net.id
-  cidr_block = "10.10.220.0/24"
+  cidr_block = "10.10.216.0/21"
   availability_zone = data.aws_availability_zones.available.names[1]
 
   tags = {
@@ -37,7 +37,7 @@ resource "aws_route_table_association" "lab-prod-b2nat" {
 # Create prod 3 subnet
 resource "aws_subnet" "lab-prod-c" {
   vpc_id     = aws_vpc.lab-net.id
-  cidr_block = "10.10.230.0/24"
+  cidr_block = "10.10.224.0/21"
   availability_zone = data.aws_availability_zones.available.names[2]
 
   tags = {

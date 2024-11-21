@@ -3,7 +3,7 @@
 # Create vpn servers subnet
 resource "aws_subnet" "lab-vpn" {
   vpc_id     = aws_vpc.lab-net.id
-  cidr_block = "10.10.105.0/24"
+  cidr_block = "10.10.104.0/24"
   availability_zone = data.aws_availability_zones.available.names[0]
 
   tags = {

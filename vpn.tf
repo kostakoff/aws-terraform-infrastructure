@@ -67,6 +67,13 @@ resource "aws_ec2_client_vpn_authorization_rule" "lab-dev-b" {
   authorize_all_groups   = true
 }
 
+resource "aws_ec2_client_vpn_authorization_rule" "lab-dev-c" {
+  description = "lab-dev-c"
+  client_vpn_endpoint_id = aws_ec2_client_vpn_endpoint.vpn.id
+  target_network_cidr    = aws_subnet.lab-dev-c.cidr_block
+  authorize_all_groups   = true
+}
+
 resource "aws_ec2_client_vpn_authorization_rule" "lab-vdi" {
   description = "lab-vdi"
   client_vpn_endpoint_id = aws_ec2_client_vpn_endpoint.vpn.id
