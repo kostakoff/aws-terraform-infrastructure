@@ -7,7 +7,8 @@ resource "aws_subnet" "lab-dev-a" {
   availability_zone = data.aws_availability_zones.available.names[0]
 
   tags = {
-    Name = "lab-dev-a"
+    "Name" = "lab-dev-a"
+    "kubernetes.io/role/internal-elb" = "1"
   }
 }
 
@@ -41,7 +42,7 @@ resource "aws_subnet" "lab-dev-c" {
   availability_zone = data.aws_availability_zones.available.names[2]
 
   tags = {
-    Name = "lab-dev-c"
+    "Name" = "lab-dev-c"
   }
 }
 

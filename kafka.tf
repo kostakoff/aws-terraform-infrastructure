@@ -1,5 +1,5 @@
 #### kafka clusters
-
+/*
 module "dev-kafka" {
   source = "./modules/kafka"
   name = "dev-kafka"
@@ -10,3 +10,4 @@ module "dev-kafka" {
   ]
   security_groups = [aws_security_group.lab-default.id]
 }
+*/
